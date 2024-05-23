@@ -18,7 +18,8 @@ ui <- dashboardPage(skin = "red",
       menuItem("Medaka Polished Assembly", tabName = "medaka", icon = icon("dna")),
       menuItem("CheckM Completion", tabName = "checkm", icon = icon("check")),
       menuItem("Prokka Annotation", tabName = "prokka", icon = icon("database")),
-      menuItem("Identifier Genes", tabName = "idg", icon = icon("dna"))
+      menuItem("Identifier Genes", tabName = "idg", icon = icon("dna")),
+      menuItem("Antimicrobial Resistance Genes", tabName = "amr", icon = icon("dna"))
   )),
 
   # Formatting to make it iolani colors
@@ -69,7 +70,8 @@ ui <- dashboardPage(skin = "red",
                 ),
               checkboxInput("prokka", "Annotate with Prokka", value = FALSE),
               checkboxInput("checkm", "Check completion with CheckM", value = FALSE),
-              checkboxInput("idg", "Extract Identifier genes", value = FALSE)),
+              checkboxInput("idg", "Extract Identifier genes", value = FALSE),
+              checkboxInput("amr", "Extract Antimicrobial Resistance genes", value = FALSE)),
             box(
               title = "Run Workflow", status = "primary", solidHeader = TRUE, width = 12,
               actionButton("run", "Run ULANA!"),
@@ -141,7 +143,15 @@ ui <- dashboardPage(skin = "red",
             status = "primary",
             solidHeader = TRUE,
             width = 6,
-            downloadButton("idg_download", "Download Identifier Genes"))))
+            downloadButton("idg_download", "Download Identifier Genes")))),
+      tabItem(tabName = "amr",
+        fluidRow(
+          box(
+            title = "AMR genes",
+            status = "primary",
+            width = 12,
+            DTOutput("amr_table"),
+            downloadButton("amr_download", "Download AMR protein sequences"))))
 )))
 
 server <- shinyServer(function(input, output, session) {
@@ -340,10 +350,12 @@ server <- shinyServer(function(input, output, session) {
 
         # Prepare prokka annotation for download
         output$prokka_annotation_download <- downloadHandler(
-          filename = "prokka_annotation.tsv",
+          filename = "prokka_annotation.zip",
           content = function(file) {
-            write.table(prokka_annotation, file, sep = "\t", row.names = FALSE, quote = FALSE)
-          }
+            system("zip -r prokka_annotation.zip prokka_out")
+            file.copy("prokka_annotation.zip", file)
+          },
+          contentType = "application/zip"
         )
 
         removeModal()
@@ -408,6 +420,39 @@ server <- shinyServer(function(input, output, session) {
           content = function(file) {
             system("zip -r identifier_genes.zip identifier_genes")
             file.copy("identifier_genes.zip", file)
+          },
+          contentType = "application/zip"
+        )
+
+        removeModal()
+      }
+    })
+
+    ##################################
+    ### Find and extract AMR genes ###
+    ##################################
+    observeEvent(input$amr, {
+      if (input$amr & input$prokka) {
+        showModal(modalDialog("Running the ULANA pipeline, extracting antimicrobial resistance genes using amrfinder", footer = NULL))
+
+        # Prepare to extract AMR genes
+        system("mkdir amr_genes")
+        amr <- paste("amrfinder --threads", input$threads, "-a prokka -p ./prokka_out/prokka_annotation.faa -g ./prokka_out/prokka_annotation.gff --print_node --plus --protein_output ./amr_genes/amrfinder_pro.fasta >./amr_genes/amrfinder_pro_results.tsv")
+
+        # Extract AMR genes
+        system(amr)
+
+        # Display the AMR genes
+        amr_genes <- read.csv("amr_genes/amrfinder_pro_results.tsv", sep = "\t")
+        amr_genes <- as.data.frame(amr_genes)
+        output$amr_table <- renderDataTable(amr_genes, options = list(scrollX = TRUE))
+
+        # Prepare AMR genes for download
+        output$amr_download <- downloadHandler(
+          filename = "amr_genes.zip",
+          content = function(file) {
+            system("zip -r amr_genes.zip amr_genes")
+            file.copy("amr_genes.zip", file)
           },
           contentType = "application/zip"
         )
