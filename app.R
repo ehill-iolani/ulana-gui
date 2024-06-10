@@ -50,32 +50,37 @@ ui <- dashboardPage(skin = "red",
 
   .skin-red .main-sidebar {
     background-color: #000000;
-  }")),
+  }
+  ")),
+
     tabItems(
       tabItem(tabName = "upload",
-            fluidRow(
-            box(
-              title = "Fastq Upload", status = "primary", solidHeader = TRUE, width = 12,
-              fileInput("fastqs", "Input fastq files", accept = c("fastq", "fastq.gz"), multiple = TRUE),
-              actionButton("fastqhelp", "Help!")),
-            box(
-              title = "Ulana Parameters", status = "primary", solidHeader = TRUE, width = 12,
-              numericInput("lowerlength", "Minimum read length", value = 1000),
-              numericInput("quality", "Minimum Quality Score", value = 9),
-              numericInput("threads", "Threads", value = 4),
-              checkboxInput("medaka", "Polish with Medaka", value = FALSE),
-                conditionalPanel(
-                  condition = "input.medaka == true",
-                  selectInput("medakaModel", "Select Medaka Model", choices = c("r1041_e82_400bps_fast_g632", "r1041_e82_400bps_hac_v4.1.0", "r1041_e82_400bps_sup_v4.1.0"))
-                ),
-              checkboxInput("prokka", "Annotate with Prokka", value = FALSE),
-              checkboxInput("checkm", "Check completion with CheckM", value = FALSE),
-              checkboxInput("idg", "Extract Identifier genes", value = FALSE),
-              checkboxInput("amr", "Extract Antimicrobial Resistance genes", value = FALSE)),
-            box(
-              title = "Run Workflow", status = "primary", solidHeader = TRUE, width = 12,
-              actionButton("run", "Run ULANA!"),
-              actionButton("ulanahelp", "Help!")))),
+        fluidRow(
+          box(
+            title = "Fastq Upload", status = "primary", solidHeader = TRUE, width = 12,
+            fileInput("fastqs", "Input fastq files", accept = c("fastq", "fastq.gz"), multiple = TRUE),
+            actionButton("fastqhelp", "Help!"))),
+        fluidRow(
+          box(
+            title = "Ulana Assembly Parameters", status = "primary", solidHeader = TRUE, width = 4,
+            numericInput("lowerlength", "Minimum read length", value = 1000),
+            numericInput("quality", "Minimum Quality Score", value = 9),
+            numericInput("threads", "Threads", value = 4),
+            actionButton("ulanahelp", "Help!")),
+          box(
+            title = "Post Assembly Analyses (optional)", status = "primary", solidHeader = TRUE, width = 4,
+            checkboxInput("medaka", "Polish Flye assembly with Medaka", value = FALSE),
+              conditionalPanel(
+                condition = "input.medaka == true",
+                selectInput("medakaModel", "Select Medaka Model", choices = c("r1041_e82_400bps_fast_g632", "r1041_e82_400bps_hac_v4.1.0", "r1041_e82_400bps_sup_v4.1.0"))),
+            checkboxInput("prokka", "Annotate with Prokka", value = FALSE),
+            checkboxInput("checkm", "Check completion with CheckM", value = FALSE),
+            checkboxInput("idg", "Extract Identifier genes", value = FALSE),
+            checkboxInput("amr", "Extract antimicrobial resistance genes with AMRFinder", value = FALSE),
+            actionButton("postasshelp", "Help!")),
+          box(
+            title = "Run Workflow", status = "primary", solidHeader = TRUE, width = 4,
+            actionButton("run", "Run ULANA!")))),
       tabItem(tabName = "qc",
         fluidRow(
           box(
@@ -149,6 +154,7 @@ ui <- dashboardPage(skin = "red",
           box(
             title = "AMR genes",
             status = "primary",
+            solidHeader = TRUE,
             width = 12,
             DTOutput("amr_table"),
             downloadButton("amr_download", "Download AMR protein sequences"))))
@@ -164,8 +170,8 @@ server <- shinyServer(function(input, output, session) {
       system("rm -rf /home/processing/*")
       isolate(session_status$new_session <- FALSE)
     }
-  }) 
-  
+  })
+
   # Set large upload size limit (server side)
   options(shiny.maxRequestSize = 250 * 1024^2)
 
@@ -299,6 +305,14 @@ server <- shinyServer(function(input, output, session) {
       filename = "assembly_graph.png",
       content = function(file) {
         file.copy("./flye_assembly/assembly_graph.png", file)
+      }
+    )
+
+    # Prepare assembly for download
+    output$ass_download <- downloadHandler(
+      filename = "flye_assembly.fasta",
+      content = function(file) {
+        file.copy("./flye_assembly/assembly.fasta", file)
       }
     )
 
@@ -461,6 +475,21 @@ server <- shinyServer(function(input, output, session) {
       }
     })
 
+  })
+
+  ####################
+  ### Help buttons ###
+  ####################
+  observeEvent(input$fastqhelp, {
+    shinyalert(title = "FASTQ Upload", text = "Upload your FASTQ files here. You can upload multiple files at once. Please only process one bacterial genome at a time.", type = "info")
+  })
+
+  observeEvent(input$ulanahelp, {
+    shinyalert(title = "ULANA Assembly Parameters", text = "Set the minimum read length, quality score, and number of threads for the ULANA pipeline. Increasing the read length typically results in a less fragmented assembly, at the cost of lower the read count. Increaseing the quality score will typically result in a more accurate assembly at the cost of read count. Increasing the number of threads will decrease run time (this should match the number of cores either on your computer or on the number of CPUs requested when starting the app.)", type = "info")
+  })
+
+  observeEvent(input$postasshelp, {
+    shinyalert(title = "Post Assembly Analyses", text = "Select the post-assembly analyses you would like to run. Medaka - polishes the Flye assembly for a more accurate consensus genome (will increase run time). Prokka - annotates the genome assembly, if the assembly was polished using Medaka the polished assembly will be used otherwise the Flye assembly will be used. CheckM - checks the completeness of the assembly, if the assembly was polished using Medaka the polished assembly will be used otherwise the Flye assembly will be used. Identifier genes - will find and extract 16S, rpoB and dnaA. AMRFinder - will find and extract confirmed antimicrobial genes if they exist in the genome. ", type = "info")
   })
 
   # Set new_session to TRUE when the session ends
