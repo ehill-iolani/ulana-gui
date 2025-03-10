@@ -1,5 +1,5 @@
-FROM rocker/shiny
-#FROM ubuntu:latest
+# Pinned here for ubuntu jammy
+FROM rocker/shiny:4.3.3
 
 # Install apt-based dependencies
 RUN apt-get update -y
@@ -89,6 +89,9 @@ RUN wget https://github.com/hyattpd/Prodigal/archive/refs/tags/v2.6.3.tar.gz && 
     make install INSTALLDIR=/tools/bin && \
     rm -r /tools/Prodigal-2.6.3 /tools/v2.6.3.tar.gz
 
+# Install barrnap
+RUN git clone https://github.com/tseemann/barrnap.git
+
 # Install pplacer + guppy
 RUN wget https://github.com/matsen/pplacer/releases/download/v1.1.alpha19/pplacer-linux-v1.1.alpha19.zip && \   
     unzip pplacer-linux-v1.1.alpha19.zip && \
@@ -107,14 +110,14 @@ RUN mkdir amrfinder &&\
     ./amrfinder -u
 
 # Set ENV
-ENV PATH="/tools/bin:/tools/Flye/bin:/tools/prokka/bin:/tools/pplacer-Linux-v1.1.alpha19:/tools/amrfinder:$PATH"
+ENV PATH="/tools/bin:/tools/Flye/bin:/tools/prokka/bin:/tools/pplacer-Linux-v1.1.alpha19:/tools/amrfinder:/tools/barrnap/bin:$PATH"
 ENV QT_QPA_PLATFORM=offscreen 
 
 # Clean up compressed files and source files
 WORKDIR /
 RUN rm samtools-1.19.2.tar.bz2 bcftools-1.19.tar.bz2 chopper-linux.zip chopper
 RUN rm -r samtools-1.19.2 bcftools-1.19 minimap2 /tools/Bandage
-RUN rm /tools/amrfinder/amrfinder_binaries_v3.12.8.tar.gz
+#RUN rm /tools/amrfinder/amrfinder_binaries_v3.12.8.tar.gz
 
 # Install R packages
 RUN R -e "install.packages(c('stringr', 'dplyr', 'ggplot2', 'plotly', 'shinydashboard', 'shinyalert', 'DT', 'htmlwidgets'))"
