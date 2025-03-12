@@ -2,9 +2,9 @@
 FROM rocker/shiny:4.3.3
 
 # Install apt-based dependencies
-RUN apt-get update -y
-RUN apt-get upgrade -y
-RUN apt-get install -y curl git g++ zlib1g-dev make bsdmainutils gawk libopenblas-base wget nano libssl-dev unzip libncurses5-dev python3 python3-pip libbz2-dev liblzma-dev ncbi-tools-bin
+RUN apt update -y
+RUN apt upgrade -y
+RUN apt install -y curl git g++ zlib1g-dev make bsdmainutils gawk libopenblas-base wget nano libssl-dev unzip libncurses5-dev python3 python3-pip libbz2-dev liblzma-dev ncbi-tools-bin pigz
 RUN apt install -y libqt5svg5-dev python-is-python3 tabix
 
 # Install medaka
@@ -30,7 +30,7 @@ RUN wget https://github.com/samtools/bcftools/releases/download/1.19/bcftools-1.
     make install
 
 # Install chopper
-RUN wget https://github.com/wdecoster/chopper/releases/download/v0.7.0/chopper-linux.zip && \
+RUN wget https://github.com/wdecoster/chopper/releases/download/v0.9.1/chopper-linux.zip && \
     unzip chopper-linux.zip && \
     chmod +x chopper && \
     cp chopper /tools/bin
