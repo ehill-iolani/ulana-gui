@@ -19,7 +19,8 @@ ui <- dashboardPage(skin = "red",
       menuItem("CheckM Completion", tabName = "checkm", icon = icon("check")),
       menuItem("Prokka Annotation", tabName = "prokka", icon = icon("database")),
       menuItem("Identifier Genes", tabName = "idg", icon = icon("dna")),
-      menuItem("Antimicrobial Resistance Genes", tabName = "amr", icon = icon("dna"))
+      menuItem("Antimicrobial Resistance Genes", tabName = "amr", icon = icon("dna")),
+      menuItem("Download Results Package", tabName = "dl_all", icon = icon("download"))
   )),
 
   # Formatting to make it iolani colors
@@ -72,7 +73,7 @@ ui <- dashboardPage(skin = "red",
             checkboxInput("medaka", "Polish Flye assembly with Medaka", value = FALSE),
               conditionalPanel(
                 condition = "input.medaka == true",
-                selectInput("medakaModel", "Select Medaka Model", choices = c("r1041_e82_400bps_fast_g632", "r1041_e82_400bps_hac_v4.1.0", "r1041_e82_400bps_sup_v4.1.0"))),
+                selectInput("medakaModel", "Select Medaka Model", choices = c("r1041_e82_400bps_fast_g632", "r1041_e82_400bps_hac_v4.3.0", "r1041_e82_400bps_sup_v4.3.0"))),
             checkboxInput("prokka", "Annotate with Prokka", value = FALSE),
             checkboxInput("checkm", "Check completion with CheckM", value = FALSE),
             checkboxInput("idg", "Extract Identifier genes", value = FALSE),
@@ -80,6 +81,7 @@ ui <- dashboardPage(skin = "red",
             actionButton("postasshelp", "Help!")),
           box(
             title = "Run Workflow", status = "primary", solidHeader = TRUE, width = 4,
+            textInput("sample_name", "Sample Name", value = "sample1"),
             actionButton("run", "Run ULANA!")))),
       tabItem(tabName = "qc",
         fluidRow(
@@ -157,7 +159,15 @@ ui <- dashboardPage(skin = "red",
             solidHeader = TRUE,
             width = 12,
             DTOutput("amr_table"),
-            downloadButton("amr_download", "Download AMR protein sequences"))))
+            downloadButton("amr_download", "Download AMR protein sequences")))),
+      tabItem(tabName = "dl_all",
+        fluidRow(
+          box(
+            title = "Download Results Package",
+            status = "primary",
+            solidHeader = TRUE,
+            width = 12,
+            downloadButton("dl_all", "Download All Results"))))
 )))
 
 server <- shinyServer(function(input, output, session) {
@@ -195,8 +205,7 @@ server <- shinyServer(function(input, output, session) {
 
     # Cat the files together and rezip
     system("cat fastq/*.fastq > wgs.fastq")
-    system("gzip wgs.fastq")
-    system("rm -r fastq wgs.fastq")
+    system("rm -r fastq")
     removeModal()
 
     ######################################
@@ -205,11 +214,11 @@ server <- shinyServer(function(input, output, session) {
     showModal(modalDialog("Running the ULANA pipeline, filtering FASTQs with chopper", footer = NULL))
 
     # Run chopper with user input
-    chopper <- paste("gunzip -c wgs.fastq.gz | chopper -q", input$quality, "--minlength", input$lowerlength, "-t", input$threads, "| gzip > wgs_qc.fastq.gz")
+    chopper <- paste("chopper -q", input$quality, "--minlength", input$lowerlength, "--threads", input$threads, "-i wgs.fastq | pigz --fast -p", input$threads, "> wgs_qc.fastq.gz")
     system(chopper, intern = TRUE)
 
     # Summarize QC
-    raw <- readLines("wgs.fastq.gz")
+    raw <- readLines("wgs.fastq")
     raw <- data.frame(matrix(unlist(strsplit(raw, "\t")), ncol = 1, byrow = TRUE))
     seq <- raw[seq(2, nrow(raw), 4), ]
     seq_len <- nchar(seq)
@@ -325,16 +334,21 @@ server <- shinyServer(function(input, output, session) {
       if (input$medaka) {
         showModal(modalDialog("Running the ULANA pipeline, polishing the assembly with Medaka", footer = NULL))
 
-        medaka_consensus <- paste("medaka_consensus -i wgs_qc.fastq.gz -d ./flye_assembly/assembly.fasta -o medaka_polished_assembly -t 2 -m", input$medakaModel)
+        medaka_consensus <- paste("medaka_consensus -i wgs_qc.fastq.gz -d ./flye_assembly/assembly.fasta -o medaka_polished_assembly -t", input$threads, "-m", input$medakaModel)
         system(medaka_consensus)
-        medaka_stitch <- paste("medaka stitch ./medaka_polished_assembly/*.hdf ./flye_assembly/assembly.fasta ./medaka_polished_assembly/polished_consensus.fasta")
+        medaka_stitch <- paste("medaka sequence ./medaka_polished_assembly/*.hdf ./flye_assembly/assembly.fasta ./medaka_polished_assembly/polished_consensus.fasta")
         system(medaka_stitch)
 
-        # Prepare polished assembly for download
+        # Prepare only the polished assembly for download
+        system("mkdir ./medaka_polished_assembly_nobam")
+        system("cp ./medaka_polished_assembly/polished_consensus.fasta ./medaka_polished_assembly_nobam/polished_consensus.fasta")
+
+        # Prepare whole polished assembly results for download
         output$ass_polished_download <- downloadHandler(
-          filename = "polished_assembly.fasta",
+          filename = "medaka_polished_assembly.zip",
           content = function(file) {
-            file.copy("./medaka_polished_assembly/polished_consensus.fasta", file)
+            system("zip -r medaka_polished_assembly.zip medaka_polished_assembly")
+            file.copy("medaka_polished_assembly.zip", file)
           }
         )
 
@@ -475,6 +489,33 @@ server <- shinyServer(function(input, output, session) {
       }
     })
 
+    ############################
+    ### Download all results ###
+    ############################
+    output$dl_all <- downloadHandler(
+      filename = paste(input$sample_name, "_results.zip"),
+      content = function(file) {
+        # Show a modal dialog indicating that the files are being compressed
+        shinyalert::shinyalert("Compressing files, please wait...", type = "info", showConfirmButton = FALSE)
+
+        # Create a temporary directory to store the results
+        temp_dir <- tempdir()
+        temp_zip <- file.path(temp_dir, "results.zip")
+
+        # Zip all the results if they exist
+        system(paste("zip -r", temp_zip, "flye_assembly medaka_polished_assembly_nobam prokka_out checkm identifier_genes amr_genes"))
+
+        # Copy the zip file to the final destination
+        file.copy(temp_zip, file)
+
+        # Close the modal dialog
+        shinyalert::closeAlert()
+
+        # Alert user that the download is ready
+        shinyalert::shinyalert("Download ready!", "Your download is ready. Click the button below to download the results.", type = "success")
+      },
+      contentType = "application/zip"
+    )
   })
 
   ####################
