@@ -493,7 +493,7 @@ server <- shinyServer(function(input, output, session) {
     ### Download all results ###
     ############################
     output$dl_all <- downloadHandler(
-      filename = paste(input$sample_name, "_results.zip"),
+      filename = paste0(input$sample_name, "_results.zip"),
       content = function(file) {
         # Show a modal dialog indicating that the files are being compressed
         shinyalert::shinyalert("Compressing files, please wait...", type = "info", showConfirmButton = FALSE)
